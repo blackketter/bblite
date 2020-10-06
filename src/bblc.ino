@@ -63,40 +63,6 @@ class LCKeyEventQueue : public KeyEventQueue {
 LCKeyEventQueue keyEvents(10);  // only remember 10 events, which isn't much
 
 
-struct keyCategoryColor {
-  keycategory_t category;
-  CRGB  color;
-};
-
-keyCategoryColor keyColors[] = {
-  { KEY_CATEGORY_ALPHA, CRGB::Red },
-  { KEY_CATEGORY_NUM, CRGB::Purple },
-  { KEY_CATEGORY_PUNCTUATION, CRGB::Yellow },
-  { KEY_CATEGORY_TEXT, CRGB::Green },
-  { KEY_CATEGORY_MODIFIER, CRGB::Blue },
-
-  { KEY_CATEGORY_FUNCTION, CRGB::Violet },
-  { KEY_CATEGORY_CURSOR, CRGB::Turquoise },
-  { KEY_CATEGORY_SYSTEM, CRGB::Chartreuse },
-  { KEY_CATEGORY_MACRO, CRGB::Gray },
-  { KEY_CATEGORY_MOUSE, CRGB::Lime },
-  { KEY_CATEGORY_MEDIA, CRGB::Maroon },
-  { KEY_CATEGORY_KEYPAD, CRGB::Brown },
-  { KEY_CATEGORY_NONE, CRGB::Black }
-};
-
-CRGB keyColor(keycode_t c) {
-  keycategory_t cat = getKeyCategory(c);
-  int i = 0;
-  do {
-    if (keyColors[i].category == cat) {
-      break;
-    }
-    i++;
-  } while (keyColors[i].category != KEY_CATEGORY_NONE);
-  return keyColors[i].color;
-}
-
 // this is the magic trick for printf to support float
 //disabled for now
 //asm(".global _printf_float");
@@ -120,6 +86,8 @@ static RazzleMatrixConfig ledConfig {
 };
 
 RazzleMatrix* ledMatrix;
+
+#include "KeyMapMode.h"
 
 void setup() {
 
@@ -175,51 +143,14 @@ void loop() {
 
 
   console.idle();
+  if (keyMatrix.update()) {
+    ledMatrix->setLEDMode(&theKeyMapMode);
+  };
   Watchdog.reset();
   if (ledMatrix) {
     ledMatrix->idle();
   }
 
-  static millis_t lastMill = 0;
-  if (keyMatrix.update()) {
-    // force an update if a key has transitioned
-    lastMill = 0;
-  }
-
   //  pass the keys through
   keyEvents.sendKeys();
-#if OLDLEDS
-  millis_t mill = clock.millis();
-  if (mill > (lastMill + (1000/FPS))) {
-
-      boolean keydown = false;
-      CRGB color;
-      for (int i = 0; i < NUM_LEDS; i++) {
-        uint8_t litkey = BBLCLEDGrid[keyMatrix.getKeyY(i)][keyMatrix.getKeyX(i)];
-        if (keyMatrix.switchIsDown(i)) {
-          color = CRGB::White;
-          if (getKeyCategory(keyMatrix.getCode(i)) != KEY_CATEGORY_MODIFIER) {
-            keydown = true;
-          }
-        } else {
-          keycode_t c = keyMatrix.getCode(i);
-          color = keyColor(c);
-        }
-        fill_solid(leds+litkey, 1, color);
-      }
-
-      if (!keydown) {
-//        fill_solid(leds,NUM_LEDS, CRGB::White);
-        static uint8_t offset = 0;
-
-        fill_solid(leds+offset, 1, CRGB::White);
-        offset++;
-        if (offset >= NUM_LEDS) { offset = 0; };
-      }
-
-
-      FastLED.show();
-      lastMill = clock.millis();
-  }
-#endif
 }
