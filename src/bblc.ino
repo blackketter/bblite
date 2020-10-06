@@ -114,6 +114,8 @@ void setup() {
   } else {
     ledMatrix->setBrightness(255, 255);
   }
+  // autoswitch every ten seconds by default
+  ledMatrix->autoSwitchInterval(10*1000);
 
   pinMode(KEYBL_ENABLE_PIN, OUTPUT);
 
@@ -141,7 +143,6 @@ void loop() {
   ram.run();
 #endif
 
-
   console.idle();
   if (keyMatrix.update()) {
     ledMatrix->setLEDMode(&theKeyMapMode);
@@ -153,4 +154,5 @@ void loop() {
 
   //  pass the keys through
   keyEvents.sendKeys();
+
 }
