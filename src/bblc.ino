@@ -2,12 +2,14 @@
 #ifdef HASDISPLAY
 #include "Adafruit_SSD1306.h"
 
-
 #define SCREEN_WIDTH 128 // OLED display width, in pixels
 #define SCREEN_HEIGHT 32 // OLED display height, in pixels
 // Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
 Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT);
 #endif
+
+#include <RazzleMatrix.h>
+#include <DefaultRazzleModes.h>
 
 #ifdef CORE_TEENSY
 #include "RamMonitor.h"
@@ -26,13 +28,9 @@ Console console;
 #include "Commands/TeensyCommands.h"
 #endif
 #include "Commands/DateCommand.h"
-#include "Commands/FPSCommand.h"
-FPSCommand theFPSCommand;
 
 #include "TypeCommand.h"
 
-//#define FASTLED_ALLOW_INTERRUPTS 1
-#include "FastLED.h"
 #include "keylayouts.h"
 #include "BBLCKeyMatrix.h"
 BBLCKeyMatrix keyMatrix;
@@ -63,15 +61,6 @@ class LCKeyEventQueue : public KeyEventQueue {
 };
 
 LCKeyEventQueue keyEvents(10);  // only remember 10 events, which isn't much
-
-// note: this is [y][x]
-const uint8_t BBLCLEDGrid[5][12] = {
-{ 0, 1, 2, 3, 4, 5, 6, 7, 8, 9,10,11},
-{23,22,21,20,19,18,17,16,15,14,13,12},
-{24,25,26,27,28,29,30,31,32,33,34,35},
-{47,46,45,44,43,42,41,40,39,38,37,36},
-{48,49,50,51,52,53,54,55,56,57,58,59}
-};
 
 
 struct keyCategoryColor {
@@ -118,9 +107,19 @@ CRGB keyColor(keycode_t c) {
 #define FPS 30
 // power scale factor for low current leds 20mA / 5mA
 #define WS2812CScale 4
-#define MaxPowerInMilliamps 100
+#define MaxPowerInMilliamps 250
 
-CRGB leds[NUM_LEDS];
+
+static RazzleMatrixConfig ledConfig {
+  12,    // led_t width;
+  5,     // led_t height;
+  GRB,   // EOrder colorOrder;
+  MaxPowerInMilliamps * WS2812CScale, // uint32_t powerSupplyMilliAmps;
+  NEO_MATRIX_TOP + NEO_MATRIX_LEFT + NEO_MATRIX_ROWS + NEO_MATRIX_ZIGZAG, // uint8_t matrixType;
+  {60}   // led_t segment[MAX_SEGMENTS];
+};
+
+RazzleMatrix* ledMatrix;
 
 void setup() {
 
@@ -141,9 +140,12 @@ void setup() {
   console.debugln("starting keyboard matrix");
   keyMatrix.begin(&keyEvents);
 
-  Serial.begin(115200);
-  FastLED.addLeds<NEOPIXEL, DATA_PIN>(leds, NUM_LEDS);
-  set_max_power_in_volts_and_milliamps( 5, MaxPowerInMilliamps * WS2812CScale);
+  ledMatrix = setupLeds(&ledConfig);
+  if (!ledMatrix) {
+    console.debugln("Failed to set up led matrix");
+  } else {
+    ledMatrix->setBrightness(255, 255);
+  }
 
   pinMode(KEYBL_ENABLE_PIN, OUTPUT);
 
@@ -171,10 +173,14 @@ void loop() {
   ram.run();
 #endif
 
-  static millis_t lastMill = 0;
 
   console.idle();
   Watchdog.reset();
+  if (ledMatrix) {
+    ledMatrix->idle();
+  }
+
+  static millis_t lastMill = 0;
   if (keyMatrix.update()) {
     // force an update if a key has transitioned
     lastMill = 0;
@@ -182,13 +188,9 @@ void loop() {
 
   //  pass the keys through
   keyEvents.sendKeys();
-
+#if OLDLEDS
   millis_t mill = clock.millis();
   if (mill > (lastMill + (1000/FPS))) {
-//     static uint8_t hue = 0;
-//    fill_rainbow (leds, NUM_LEDS, hue, 256/NUM_LEDS);
-//       hue += 10;
-      fill_solid(leds,NUM_LEDS, CRGB::Black);
 
       boolean keydown = false;
       CRGB color;
@@ -218,6 +220,6 @@ void loop() {
 
       FastLED.show();
       lastMill = clock.millis();
-      theFPSCommand.newFrame();
   }
+#endif
 }
