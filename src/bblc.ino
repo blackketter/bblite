@@ -1,3 +1,19 @@
+#include "Wire.h"
+#ifdef HASDISPLAY
+#include "Adafruit_SSD1306.h"
+
+
+#define SCREEN_WIDTH 128 // OLED display width, in pixels
+#define SCREEN_HEIGHT 32 // OLED display height, in pixels
+// Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
+Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT);
+#endif
+
+#ifdef CORE_TEENSY
+#include "RamMonitor.h"
+RamMonitor ram;
+#endif
+
 #include <Adafruit_SleepyDog.h>
 
 #include "Clock.h"
@@ -6,7 +22,9 @@ Clock clock;
 #include "Console.h"
 Console console;
 
+#ifdef CORE_TEENSY
 #include "Commands/TeensyCommands.h"
+#endif
 #include "Commands/DateCommand.h"
 #include "Commands/FPSCommand.h"
 FPSCommand theFPSCommand;
@@ -15,43 +33,39 @@ FPSCommand theFPSCommand;
 
 //#define FASTLED_ALLOW_INTERRUPTS 1
 #include "FastLED.h"
+#include "keylayouts.h"
+#include "BBLCKeyMatrix.h"
+BBLCKeyMatrix keyMatrix;
 
-#include "BB100KeyMatrix.h"
-BB100KeyMatrix keyMatrix;
+#include "KeyOverlays.h"
 
-#include "FunctionOverlay.h"
-
-#include "Adafruit_SSD1306.h"
-#define SCREEN_WIDTH 128 // OLED display width, in pixels
-#define SCREEN_HEIGHT 32 // OLED display height, in pixels
-
-// Declaration for an SSD1306 display connected to I2C (SDA, SCL pins)
-#define OLED_RESET     -1 // Reset pin # (or -1 if sharing Arduino reset pin)
-Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT, &Wire, OLED_RESET);
-
-class TestKeyEventQueue : public KeyEventQueue {
+class LCKeyEventQueue : public KeyEventQueue {
   public:
-    TestKeyEventQueue(int maxEventHistory) : KeyEventQueue(maxEventHistory) {}
+    LCKeyEventQueue(int maxEventHistory) : KeyEventQueue(maxEventHistory) {}
     virtual void processEvent(KeyEvent* key) override {
-        if (key->pressed(KEY_LEFT_FN) || key->pressed(KEY_RIGHT_FN)) {
-          if (keyMatrix.getOverlay() != functionOverlay) {
+// TODO - use isPressed() to determine layer
+        if (key->pressed(KEY_MOUSE)) {
+          key->matrix()->setOverlay(mouseOverlay);
+        } else if (key->released(KEY_MOUSE)) {
+          key->matrix()->setOverlay();
+        } if (key->pressed(KEY_LEFT_FN) || key->pressed(KEY_RIGHT_FN)) {
+          if (key->matrix()->getOverlay() != functionOverlay) {
             console.debug("setting function layer\n");
-            keyMatrix.setOverlay(functionOverlay);
+            key->matrix()->setOverlay(functionOverlay);
           }
-        } else if (
-                   (key->released(KEY_LEFT_FN) || key->released(KEY_RIGHT_FN))  // released fn key
-                  ) {
-                console.debug("removing function layer\n");
-                keyMatrix.setOverlay();
+        } else if (key->released(KEY_LEFT_FN) || key->released(KEY_RIGHT_FN)) {
+
+          console.debug("removing function layer\n");
+          key->matrix()->setOverlay();
         }
       }
 
 };
 
-TestKeyEventQueue keyEvents(10);  // only remember 10 events, which isn't much
+LCKeyEventQueue keyEvents(10);  // only remember 10 events, which isn't much
 
 // note: this is [y][x]
-const uint8_t BB100LEDGrid[5][12] = {
+const uint8_t BBLCLEDGrid[5][12] = {
 { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9,10,11},
 {23,22,21,20,19,18,17,16,15,14,13,12},
 {24,25,26,27,28,29,30,31,32,33,34,35},
@@ -109,9 +123,20 @@ CRGB keyColor(keycode_t c) {
 CRGB leds[NUM_LEDS];
 
 void setup() {
-  console.begin(&Serial,0);
 
-//  console.debugf("Starting %dms watchdog\n",Watchdog.enable(4000));
+#ifdef CORE_TEENSY
+  ram.initialize();
+#endif
+
+#ifdef ARDUINO_TEENSYLC
+// TEENSYLC is memory constrained, no console log
+  console.begin(&Serial,0);
+#else
+  console.begin(&Serial);
+#endif
+  Wire.begin();
+
+  console.debugf("Starting %dms watchdog\n",Watchdog.enable(4000));
 
   console.debugln("starting keyboard matrix");
   keyMatrix.begin(&keyEvents);
@@ -123,30 +148,33 @@ void setup() {
   pinMode(KEYBL_ENABLE_PIN, OUTPUT);
 
   digitalWrite(KEYBL_ENABLE_PIN, LOW);  // turn on the LED power
-
-
+#ifdef HASDISPLAY
   if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) { // Address 0x3C for 128x32
     console.debugln("SSD1306 allocation failed");
+  } else {
+    // Show initial display buffer contents on the screen --  // the library initializes this with an Adafruit splash screen.
+    display.clearDisplay();
+    display.setTextSize(2);      // Normal 1:1 pixel scale
+    display.setTextColor(SSD1306_WHITE); // Draw white text
+    display.setCursor(0, 0);     // Start at top-left corner
+    display.cp437(true);         // Use full 256 char 'Code Page 437' font
+    display.println("hello");
+    // Draw a single pixel in white
+    display.drawPixel(10, 10, SSD1306_WHITE);
+    display.display();
   }
-
-  // Show initial display buffer contents on the screen --  // the library initializes this with an Adafruit splash screen.
-  display.clearDisplay();
-  display.setTextSize(2);      // Normal 1:1 pixel scale
-  display.setTextColor(SSD1306_WHITE); // Draw white text
-  display.setCursor(0, 0);     // Start at top-left corner
-  display.cp437(true);         // Use full 256 char 'Code Page 437' font
-  display.println("hello");
-  // Draw a single pixel in white
-  display.drawPixel(10, 10, SSD1306_WHITE);
-  display.display();
-
+#endif
 }
 
 void loop() {
+#ifdef CORE_TEENSY
+  ram.run();
+#endif
+
   static millis_t lastMill = 0;
 
   console.idle();
-//  Watchdog.reset();
+  Watchdog.reset();
   if (keyMatrix.update()) {
     // force an update if a key has transitioned
     lastMill = 0;
@@ -165,7 +193,7 @@ void loop() {
       boolean keydown = false;
       CRGB color;
       for (int i = 0; i < NUM_LEDS; i++) {
-        uint8_t litkey = BB100LEDGrid[keyMatrix.getKeyY(i)][keyMatrix.getKeyX(i)];
+        uint8_t litkey = BBLCLEDGrid[keyMatrix.getKeyY(i)][keyMatrix.getKeyX(i)];
         if (keyMatrix.switchIsDown(i)) {
           color = CRGB::White;
           if (getKeyCategory(keyMatrix.getCode(i)) != KEY_CATEGORY_MODIFIER) {

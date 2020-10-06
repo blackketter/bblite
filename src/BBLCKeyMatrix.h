@@ -1,5 +1,5 @@
-#ifndef _BB100KeyMatrix_
-#define _BB100KeyMatrix_
+#ifndef _BBLCKeyMatrix_
+#define _BBLCKeyMatrix_
 #include "KeyLayout.h"
 #include "KeyMatrix.h"
 
@@ -10,7 +10,11 @@ static const  pinNumber columnPins[] = {
   10,
   11,
   12,
+#ifdef ARDUINO_TEENSYLC
   26,
+#else // TEENSY32 doesn't have D26 on the same pin.  Bridge to D20, which is reserved for the encoder, which isn't populated
+  20,
+#endif
   13,
   14,
   15
@@ -26,7 +30,7 @@ static const  pinNumber rowPins[] = {
 };
 
 
-const keymap_t BB100Map[] = {
+const keymap_t BBLCMap[] = {
 // these are arranged by the pin rows and columns
 // pin col 0
     {  0, KEY_MINUS },
@@ -103,7 +107,7 @@ const keymap_t BB100Map[] = {
 };
 
 
-const keylayout_t BB100Layout[] = {
+const keylayout_t BBLCLayout[] = {
 // code, x, y, w, h
 // these are arranged by the visual layout of the keys
 // left of display
@@ -184,10 +188,10 @@ const keylayout_t BB100Layout[] = {
   { NO_KEY, 0, 0, 0, 0 }
 };
 
-class BB100KeyMatrix : public GPIOKeyMatrix {
+class BBLCKeyMatrix : public GPIOKeyMatrix {
   public:
-    BB100KeyMatrix() : GPIOKeyMatrix(BB100Layout, BB100Map, 6, 10, rowPins, columnPins) {};
-    const char* name() { return "BB100"; }
+    BBLCKeyMatrix() : GPIOKeyMatrix(BBLCLayout, BBLCMap, 6, 10, rowPins, columnPins) {};
+    const char* name() { return "BBLC"; }
   private:
 
 };
