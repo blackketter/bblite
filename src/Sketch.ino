@@ -10,11 +10,9 @@ Adafruit_SSD1306 display(SCREEN_WIDTH, SCREEN_HEIGHT);
 
 #include <RazzleMatrix.h>
 #include <DefaultRazzleModes.h>
+#include "KeyMapMode.h"
+RazzleMatrix* ledMatrix;
 
-#ifdef CORE_TEENSY
-#include "RamMonitor.h"
-RamMonitor ram;
-#endif
 
 #include <Adafruit_SleepyDog.h>
 
@@ -37,6 +35,19 @@ BBLCKeyMatrix keyMatrix;
 
 #include "KeyOverlays.h"
 
+#define NUM_LEDS 60
+#define DATA_PIN 17
+#define KEYBL_ENABLE_PIN 25
+
+// power scale factor for low current leds 20mA / 5mA
+#define WS2812CScale 4
+#define MaxPowerInMilliamps 250
+
+// this is the magic trick for printf to support float
+//disabled for now
+//asm(".global _printf_float");
+
+
 class LCKeyEventQueue : public KeyEventQueue {
   public:
     LCKeyEventQueue(int maxEventHistory) : KeyEventQueue(maxEventHistory) {}
@@ -44,37 +55,26 @@ class LCKeyEventQueue : public KeyEventQueue {
 // TODO - use isPressed() to determine layer
         if (key->pressed(KEY_MOUSE)) {
           key->matrix()->setOverlay(mouseOverlay);
+          ledMatrix->setLEDMode(&theKeyMapMode);
         } else if (key->released(KEY_MOUSE)) {
           key->matrix()->setOverlay();
+          ledMatrix->setNextLEDMode();
         } if (key->pressed(KEY_LEFT_FN) || key->pressed(KEY_RIGHT_FN)) {
           if (key->matrix()->getOverlay() != functionOverlay) {
             console.debug("setting function layer\n");
             key->matrix()->setOverlay(functionOverlay);
+            ledMatrix->setLEDMode(&theKeyMapMode);
           }
         } else if (key->released(KEY_LEFT_FN) || key->released(KEY_RIGHT_FN)) {
-
           console.debug("removing function layer\n");
           key->matrix()->setOverlay();
+          ledMatrix->setNextLEDMode();
         }
       }
 
 };
 
 LCKeyEventQueue keyEvents(10);  // only remember 10 events, which isn't much
-
-
-// this is the magic trick for printf to support float
-//disabled for now
-//asm(".global _printf_float");
-
-#define NUM_LEDS 60
-#define DATA_PIN 17
-#define KEYBL_ENABLE_PIN 25
-#define FPS 30
-// power scale factor for low current leds 20mA / 5mA
-#define WS2812CScale 4
-#define MaxPowerInMilliamps 250
-
 
 static RazzleMatrixConfig ledConfig {
   12,    // led_t width;
@@ -85,15 +85,8 @@ static RazzleMatrixConfig ledConfig {
   {60}   // led_t segment[MAX_SEGMENTS];
 };
 
-RazzleMatrix* ledMatrix;
-
-#include "KeyMapMode.h"
-
 void setup() {
 
-#ifdef CORE_TEENSY
-  ram.initialize();
-#endif
 
 #ifdef ARDUINO_TEENSYLC
 // TEENSYLC is memory constrained, no console log
@@ -105,7 +98,7 @@ void setup() {
 
   console.debugf("Starting %dms watchdog\n",Watchdog.enable(4000));
 
-  console.debugln("starting keyboard matrix");
+  console.debugln("Starting keyboard matrix");
   keyMatrix.begin(&keyEvents);
 
   ledMatrix = setupLeds(&ledConfig);
@@ -113,13 +106,12 @@ void setup() {
     console.debugln("Failed to set up led matrix");
   } else {
     ledMatrix->setBrightness(255, 255);
+    // autoswitch every ten seconds by default
+    ledMatrix->autoSwitchInterval(10*1000);
+    pinMode(KEYBL_ENABLE_PIN, OUTPUT);
+    digitalWrite(KEYBL_ENABLE_PIN, LOW);  // turn on the LED power
   }
-  // autoswitch every ten seconds by default
-  ledMatrix->autoSwitchInterval(10*1000);
 
-  pinMode(KEYBL_ENABLE_PIN, OUTPUT);
-
-  digitalWrite(KEYBL_ENABLE_PIN, LOW);  // turn on the LED power
 #ifdef HASDISPLAY
   if(!display.begin(SSD1306_SWITCHCAPVCC, 0x3C)) { // Address 0x3C for 128x32
     console.debugln("SSD1306 allocation failed");
@@ -139,20 +131,14 @@ void setup() {
 }
 
 void loop() {
-#ifdef CORE_TEENSY
-  ram.run();
-#endif
-
   console.idle();
-  if (keyMatrix.update()) {
-    ledMatrix->setLEDMode(&theKeyMapMode);
-  };
-  Watchdog.reset();
-  if (ledMatrix) {
-    ledMatrix->idle();
-  }
+
+  ledMatrix->idle();
+
+  keyMatrix.update();
 
   //  pass the keys through
   keyEvents.sendKeys();
 
+  Watchdog.reset();
 }

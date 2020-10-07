@@ -53,7 +53,8 @@ KeyMapMode theKeyMapMode;
 // here we go
 void KeyMapMode::draw(RazzleMatrix* frame) {
   CRGB color;
-  for (int i = 0; i < NUM_LEDS; i++) {
+  int n =  frame->numPixels();
+  for (int i = 0; i < n; i++) {
     if (keyMatrix.switchIsDown(i)) {
       color = CRGB::White;
     } else {
