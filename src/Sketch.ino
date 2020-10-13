@@ -55,23 +55,22 @@ class LCKeyEventQueue : public KeyEventQueue {
 // TODO - use isPressed() to determine layer
         if (key->pressed(KEY_MOUSE)) {
           key->matrix()->setOverlay(mouseOverlay);
-          ledMatrix->setLEDMode(&theKeyMapMode);
         } else if (key->released(KEY_MOUSE)) {
           key->matrix()->setOverlay();
-          ledMatrix->setNextLEDMode();
         } if (key->pressed(KEY_LEFT_FN) || key->pressed(KEY_RIGHT_FN)) {
           if (key->matrix()->getOverlay() != functionOverlay) {
             console.debug("setting function layer\n");
             key->matrix()->setOverlay(functionOverlay);
-            ledMatrix->setLEDMode(&theKeyMapMode);
           }
         } else if (key->released(KEY_LEFT_FN) || key->released(KEY_RIGHT_FN)) {
           console.debug("removing function layer\n");
           key->matrix()->setOverlay();
-          ledMatrix->setNextLEDMode();
         }
-      }
 
+        // whenever there's a key action, reset the keysaver timer
+        ledMatrix->setLEDMode(&theKeyMapMode);
+        ledMatrix->resetLastModeSwitch();
+      }
 };
 
 LCKeyEventQueue keyEvents(10);  // only remember 10 events, which isn't much
@@ -108,6 +107,8 @@ void setup() {
     ledMatrix->setBrightness(255, 255);
     // autoswitch every ten seconds by default
     ledMatrix->autoSwitchInterval(10*1000);
+    ledMatrix->setLEDMode(&theKeyMapMode);
+
     pinMode(KEYBL_ENABLE_PIN, OUTPUT);
     digitalWrite(KEYBL_ENABLE_PIN, LOW);  // turn on the LED power
   }
